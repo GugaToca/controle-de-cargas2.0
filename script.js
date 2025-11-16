@@ -20,6 +20,7 @@ const totalCargasSpan = document.getElementById("totalCargas");
 const totalPedidosSpan = document.getElementById("totalPedidos");
 const totalVolumesSpan = document.getElementById("totalVolumes");
 const listaVaziaMsg = document.getElementById("listaVaziaMsg");
+const exportarPdfBtn = document.getElementById("exportarPdfBtn"); // botão de exportar PDF
 
 // Campos do formulário
 const campoData = document.getElementById("data");
@@ -94,10 +95,18 @@ limparFiltrosBtn.addEventListener("click", () => {
   renderizarTabela();
 });
 
+// Botão de exportar PDF
+if (exportarPdfBtn) {
+  exportarPdfBtn.addEventListener("click", exportarPdf);
+}
+
 // ----- FUNÇÕES -----
 
 function gerarId() {
-  return Date.now().toString(36) + Math.random().toString(36).substring(2, 7);
+  return (
+    Date.now().toString(36) +
+    Math.random().toString(36).substring(2, 7)
+  );
 }
 
 function carregarDoStorage() {
@@ -347,4 +356,129 @@ function escapeHtml(str) {
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;")
     .replace(/'/g, "&#039;");
+}
+
+// Exportar tudo em PDF
+function exportarPdf() {
+  if (!cargas.length) {
+    alert("Não há cargas registradas para exportar.");
+    return;
+  }
+
+  // Ordena por data e depois por número de carga
+  const listaOrdenada = [...cargas].sort((a, b) => {
+    if (a.data === b.data) {
+      return a.numeroCarga.localeCompare(b.numeroCarga);
+    }
+    return a.data.localeCompare(b.data);
+  });
+
+  const estilo = `
+    body {
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      color: #111827;
+      margin: 20px;
+    }
+    h1 {
+      text-align: center;
+      margin-bottom: 4px;
+      font-size: 18px;
+    }
+    p.sub {
+      text-align: center;
+      font-size: 11px;
+      margin-top: 0;
+      margin-bottom: 16px;
+      color: #4b5563;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 11px;
+    }
+    th, td {
+      border: 1px solid #e5e7eb;
+      padding: 4px 6px;
+      vertical-align: top;
+    }
+    th {
+      background: #f3f4f6;
+      font-weight: 600;
+    }
+    .right {
+      text-align: right;
+      white-space: nowrap;
+    }
+    .small {
+      white-space: nowrap;
+    }
+  `;
+
+  let linhas = "";
+  listaOrdenada.forEach((carga) => {
+    linhas += `
+      <tr>
+        <td class="small">${formatarDataBr(carga.data)}</td>
+        <td class="small">${escapeHtml(carga.numeroCarga)}</td>
+        <td>${escapeHtml(carga.transportadora)}</td>
+        <td>${escapeHtml(carga.rota || "")}</td>
+        <td class="right">${carga.qtdPedidos || 0}</td>
+        <td class="right">${carga.qtdVolumes || 0}</td>
+        <td class="small">${carga.horario || "-"}</td>
+        <td>${escapeHtml(carga.quemCarregou || "-")}</td>
+        <td class="small">${carga.problema === "sim" ? "Sim" : "Não"}</td>
+        <td>${escapeHtml(carga.observacoes || "")}</td>
+      </tr>
+    `;
+  });
+
+  const agora = new Date();
+  const dataStr = agora.toLocaleDateString("pt-BR");
+  const horaStr = agora.toLocaleTimeString("pt-BR", {
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+
+  const html = `
+    <html>
+      <head>
+        <title>Diário de Cargas - Exportação</title>
+        <style>${estilo}</style>
+      </head>
+      <body>
+        <h1>Diário de Cargas</h1>
+        <p class="sub">Relatório completo gerado em ${dataStr} às ${horaStr}</p>
+        <table>
+          <thead>
+            <tr>
+              <th>Data</th>
+              <th>Carga</th>
+              <th>Transportadora</th>
+              <th>Rota / Cidade</th>
+              <th>Pedidos</th>
+              <th>Volumes</th>
+              <th>Horário</th>
+              <th>Quem carregou</th>
+              <th>Problema?</th>
+              <th>Observações</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${linhas}
+          </tbody>
+        </table>
+      </body>
+    </html>
+  `;
+
+  const win = window.open("", "_blank");
+  if (!win) {
+    alert("O navegador bloqueou o pop-up. Permita pop-ups para este site para exportar o PDF.");
+    return;
+  }
+  win.document.open();
+  win.document.write(html);
+  win.document.close();
+  win.focus();
+  win.print(); // aqui o usuário escolhe "Salvar como PDF"
 }
