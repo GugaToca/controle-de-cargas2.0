@@ -431,3 +431,16 @@ td.observacoes-cell {
     min-width: 100%;
   }
 }
+html, body {
+  height: 100%;
+  overflow-x: hidden;
+}
+
+body {
+  display: flex;
+  flex-direction: column;
+}
+
+footer {
+  margin-top: auto;
+}
