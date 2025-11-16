@@ -20,7 +20,7 @@
 }
 
 html {
-  background: radial-gradient(circle at top, #111827, #020617 55%);
+  background: radial-gradient(circle at top, #334977, #081a68 55%);
   height: 100%;
 }
 
@@ -452,3 +452,4 @@ body {
 footer {
   margin-top: auto;
 }
+
