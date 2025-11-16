@@ -1,7 +1,34 @@
-// Chave no localStorage
-const STORAGE_KEY = "diario_cargas";
+// ==============================
+// Firebase / Firestore
+// ==============================
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-app.js";
+import {
+  getFirestore,
+  collection,
+  getDocs,
+  addDoc,
+  updateDoc,
+  deleteDoc,
+  doc,
+} from "https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore.js";
 
+// Configuração do seu projeto Firebase
+const firebaseConfig = {
+  apiKey: "AIzaSyDB6zSjwunQ1RHtan3C71DpFQrUCIO5Ln0",
+  authDomain: "diario-de-cargas.firebaseapp.com",
+  projectId: "diario-de-cargas",
+  storageBucket: "diario-de-cargas.firebasestorage.app",
+  messagingSenderId: "152440111050",
+  appId: "1:152440111050:web:c050822e1e1a97df569933",
+};
+
+// Inicializa Firebase
+const app = initializeApp(firebaseConfig);
+const db = getFirestore(app);
+
+// ==============================
 // Estado em memória
+// ==============================
 let cargas = [];
 let cargaEmEdicaoId = null;
 
@@ -20,7 +47,7 @@ const totalCargasSpan = document.getElementById("totalCargas");
 const totalPedidosSpan = document.getElementById("totalPedidos");
 const totalVolumesSpan = document.getElementById("totalVolumes");
 const listaVaziaMsg = document.getElementById("listaVaziaMsg");
-const exportarPdfBtn = document.getElementById("exportarPdfBtn"); // botão de exportar PDF
+const exportarPdfBtn = document.getElementById("exportarPdfBtn");
 
 // Campos do formulário
 const campoData = document.getElementById("data");
@@ -34,10 +61,11 @@ const campoQuemCarregou = document.getElementById("quemCarregou");
 const campoProblema = document.getElementById("problema");
 const campoObservacoes = document.getElementById("observacoes");
 
-// Carregar dados na inicialização
-document.addEventListener("DOMContentLoaded", () => {
-  carregarDoStorage();
-  renderizarTabela();
+// ==============================
+// Inicialização
+// ==============================
+document.addEventListener("DOMContentLoaded", async () => {
+  await carregarDoFirestore();
 
   // Pré-preencher data de hoje
   if (!campoData.value) {
@@ -45,35 +73,41 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 });
 
-// Listener do formulário
-form.addEventListener("submit", (e) => {
+// ==============================
+// Eventos
+// ==============================
+
+// Formulário de salvar / atualizar
+form.addEventListener("submit", async (e) => {
   e.preventDefault();
 
   const novaCarga = obterDadosDoFormulario();
   if (!novaCarga) return; // Validação falhou
 
-  if (cargaEmEdicaoId) {
-    // Atualizar
-    novaCarga.id = cargaEmEdicaoId;
-    const idx = cargas.findIndex((c) => c.id === cargaEmEdicaoId);
-    if (idx !== -1) {
-      cargas[idx] = novaCarga;
+  try {
+    const dados = { ...novaCarga };
+    delete dados.id; // não salvamos o id dentro do documento
+
+    if (cargaEmEdicaoId) {
+      // Atualizar documento existente
+      const ref = doc(db, "cargas", cargaEmEdicaoId);
+      await updateDoc(ref, dados);
+
+      cargaEmEdicaoId = null;
+      salvarBtn.textContent = "Salvar carga";
+      cancelarEdicaoBtn.classList.add("hidden");
+    } else {
+      // Criar nova carga
+      await addDoc(collection(db, "cargas"), dados);
     }
-    cargaEmEdicaoId = null;
-    salvarBtn.textContent = "Salvar carga";
-    cancelarEdicaoBtn.classList.add("hidden");
-  } else {
-    // Criar
-    novaCarga.id = gerarId();
-    cargas.push(novaCarga);
+
+    await carregarDoFirestore();
+    form.reset();
+    campoData.value = new Date().toISOString().split("T")[0];
+  } catch (err) {
+    console.error("Erro ao salvar carga:", err);
+    alert("Erro ao salvar a carga no servidor.");
   }
-
-  salvarNoStorage();
-  renderizarTabela();
-  form.reset();
-
-  // Voltar data de hoje
-  campoData.value = new Date().toISOString().split("T")[0];
 });
 
 // Cancelar edição
@@ -86,8 +120,8 @@ cancelarEdicaoBtn.addEventListener("click", () => {
 });
 
 // Filtros
-filtroDataInput.addEventListener("change", renderizarTabela);
-filtroBuscaInput.addEventListener("input", renderizarTabela);
+filtroDataInput.addEventListener("change", () => renderizarTabela());
+filtroBuscaInput.addEventListener("input", () => renderizarTabela());
 
 limparFiltrosBtn.addEventListener("click", () => {
   filtroDataInput.value = "";
@@ -100,31 +134,56 @@ if (exportarPdfBtn) {
   exportarPdfBtn.addEventListener("click", exportarPdf);
 }
 
-// ----- FUNÇÕES -----
+// ==============================
+// Firestore
+// ==============================
+
+async function carregarDoFirestore() {
+  try {
+    const snap = await getDocs(collection(db, "cargas"));
+
+    cargas = snap.docs.map((docSnap) => {
+      const data = docSnap.data();
+      return {
+        id: docSnap.id,
+        data: data.data || "",
+        numeroCarga: data.numeroCarga || "",
+        transportadora: data.transportadora || "",
+        rota: data.rota || "",
+        qtdPedidos: Number(data.qtdPedidos || 0),
+        qtdVolumes: Number(data.qtdVolumes || 0),
+        horario: data.horario || "",
+        quemCarregou: data.quemCarregou || "",
+        problema: data.problema || "nao",
+        observacoes: data.observacoes || "",
+      };
+    });
+
+    // Ordenar como antes (por data e nº de carga)
+    cargas.sort((a, b) => {
+      if (a.data === b.data) {
+        return a.numeroCarga.localeCompare(b.numeroCarga);
+      }
+      return a.data.localeCompare(b.data);
+    });
+
+    renderizarTabela();
+  } catch (err) {
+    console.error("Erro ao carregar do Firestore:", err);
+    alert("Erro ao carregar dados do servidor.");
+  }
+}
+
+// ==============================
+// Funções auxiliares
+// ==============================
 
 function gerarId() {
+  // Mantida só se você quiser usar em algo no futuro
   return (
     Date.now().toString(36) +
     Math.random().toString(36).substring(2, 7)
   );
-}
-
-function carregarDoStorage() {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    cargas = raw ? JSON.parse(raw) : [];
-  } catch (err) {
-    console.error("Erro ao carregar do storage:", err);
-    cargas = [];
-  }
-}
-
-function salvarNoStorage() {
-  try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(cargas));
-  } catch (err) {
-    console.error("Erro ao salvar no storage:", err);
-  }
 }
 
 function obterDadosDoFormulario() {
@@ -132,8 +191,12 @@ function obterDadosDoFormulario() {
   const numeroCarga = campoNumeroCarga.value.trim();
   const transportadora = campoTransportadora.value.trim();
   const rota = campoRota.value.trim();
-  const qtdPedidos = campoQtdPedidos.value ? parseInt(campoQtdPedidos.value, 10) : 0;
-  const qtdVolumes = campoQtdVolumes.value ? parseInt(campoQtdVolumes.value, 10) : 0;
+  const qtdPedidos = campoQtdPedidos.value
+    ? parseInt(campoQtdPedidos.value, 10)
+    : 0;
+  const qtdVolumes = campoQtdVolumes.value
+    ? parseInt(campoQtdVolumes.value, 10)
+    : 0;
   const horario = campoHorario.value;
   const quemCarregou = campoQuemCarregou.value.trim();
   const problema = campoProblema.value;
@@ -145,7 +208,7 @@ function obterDadosDoFormulario() {
   }
 
   return {
-    id: null, // preenchido depois
+    id: null,
     data,
     numeroCarga,
     transportadora,
@@ -275,7 +338,7 @@ function renderizarTabela() {
   totalPedidosSpan.textContent = totalPedidos;
   totalVolumesSpan.textContent = totalVolumes;
 
-  // Ações dos botões da tabela
+  // Botões da tabela
   tabelaCorpo.querySelectorAll("button[data-acao]").forEach((btn) => {
     btn.addEventListener("click", () => {
       const acao = btn.getAttribute("data-acao");
@@ -288,7 +351,7 @@ function renderizarTabela() {
     });
   });
 
-  // Ações dos botões dos cards (mobile)
+  // Botões dos cards (mobile)
   cardsContainer.querySelectorAll("button[data-acao]").forEach((btn) => {
     btn.addEventListener("click", () => {
       const acao = btn.getAttribute("data-acao");
@@ -322,11 +385,10 @@ function iniciarEdicao(id) {
   salvarBtn.textContent = "Atualizar carga";
   cancelarEdicaoBtn.classList.remove("hidden");
 
-  // Scroll para o topo do formulário
   window.scrollTo({ top: 0, behavior: "smooth" });
 }
 
-function excluirCarga(id) {
+async function excluirCarga(id) {
   const carga = cargas.find((c) => c.id === id);
   const mensagem = carga
     ? `Tem certeza que deseja excluir a carga ${carga.numeroCarga} de ${formatarDataBr(
@@ -336,18 +398,22 @@ function excluirCarga(id) {
 
   if (!confirm(mensagem)) return;
 
-  cargas = cargas.filter((c) => c.id !== id);
-  if (cargaEmEdicaoId === id) {
-    cargaEmEdicaoId = null;
-    form.reset();
-    salvarBtn.textContent = "Salvar carga";
-    cancelarEdicaoBtn.classList.add("hidden");
+  try {
+    await deleteDoc(doc(db, "cargas", id));
+    if (cargaEmEdicaoId === id) {
+      cargaEmEdicaoId = null;
+      form.reset();
+      salvarBtn.textContent = "Salvar carga";
+      cancelarEdicaoBtn.classList.add("hidden");
+    }
+    await carregarDoFirestore();
+  } catch (err) {
+    console.error("Erro ao excluir:", err);
+    alert("Erro ao excluir a carga do servidor.");
   }
-  salvarNoStorage();
-  renderizarTabela();
 }
 
-// Função simples para evitar HTML malicioso
+// Evitar HTML malicioso
 function escapeHtml(str) {
   if (!str) return "";
   return str
@@ -358,14 +424,16 @@ function escapeHtml(str) {
     .replace(/'/g, "&#039;");
 }
 
+// ==============================
 // Exportar tudo em PDF
+// ==============================
 function exportarPdf() {
   if (!cargas.length) {
     alert("Não há cargas registradas para exportar.");
     return;
   }
 
-  // Ordena por data e depois por número de carga
+  // Ordena por data e número
   const listaOrdenada = [...cargas].sort((a, b) => {
     if (a.data === b.data) {
       return a.numeroCarga.localeCompare(b.numeroCarga);
@@ -480,5 +548,5 @@ function exportarPdf() {
   win.document.write(html);
   win.document.close();
   win.focus();
-  win.print(); // aqui o usuário escolhe "Salvar como PDF"
+  win.print(); // aqui você escolhe "Salvar como PDF"
 }
