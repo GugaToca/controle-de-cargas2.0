@@ -45,7 +45,7 @@ body {
 
 .container {
   max-width: 1200px;
-  margin: 0 auto 32px;
+  margin: 0 auto;
   padding: 0 16px 16px;
   display: flex;
   flex-direction: column;
@@ -431,6 +431,7 @@ td.observacoes-cell {
     min-width: 100%;
   }
 }
+
 html, body {
   height: 100%;
   overflow-x: hidden;
